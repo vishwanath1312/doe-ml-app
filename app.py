@@ -20,7 +20,7 @@ st.write("Predict & optimize formulation parameters using Machine Learning")
 # -----------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_excel("doe (1).xlsx")
+    df = pd.read_excel("doe.xlsx")
     df.columns = [
         "GMO", "Poloxamer", "ProbeTime",
         "ParticleSize", "Entrapment", "CDR"
