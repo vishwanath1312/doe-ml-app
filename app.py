@@ -48,7 +48,7 @@ def train_model():
 model, X_test, Y_test = train_model()
 
 # -----------------------------
-# RESULTS TAB
+# RESULTS DASHBOARD
 # -----------------------------
 st.header("📊 Results Dashboard: Prediction, Model Performance & Optimization")
 
@@ -98,11 +98,15 @@ with col1:
 
             fpr, tpr, thresholds = roc_curve(y_true, y_score)
             roc_auc = auc(fpr, tpr)
-            eer_idx = np.nanargmin(np.abs(fpr - (1 - tpr)))
-            eer = fpr[eer_idx]
+
+            # Robust EER calculation
+            fnr = 1 - tpr
+            eer_idx = np.nanargmin(np.abs(fpr - fnr))
+            eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
 
             st.write(f"**{response_choice}:** ROC AUC = {roc_auc:.2f}, EER = {eer:.2f}")
 
+            # Plot ROC curve
             fig_roc, ax_roc = plt.subplots()
             ax_roc.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
             ax_roc.plot([0, 1], [0, 1], 'k--')
