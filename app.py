@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, roc_curve, auc
 # -----------------------------
 st.set_page_config(page_title="DOE Full ML Dashboard", layout="wide")
 st.title("🔬 DOE + ML Full Dashboard")
-st.write("Forward/Backward Prediction, Model Performance (MSE & EER), and Optimal Formulation")
+st.write("Forward/Backward Prediction with Model Performance and Optimization")
 
 # -----------------------------
 # LOAD DATA
@@ -43,9 +43,8 @@ def train_models():
     bwd_model = MultiOutputRegressor(RandomForestRegressor(n_estimators=200, random_state=42))
     bwd_model.fit(X_bwd, Y_bwd)
 
-    # Train/test split for performance evaluation (forward model)
+    # Train/test split for performance evaluation
     X_train, X_test, Y_train, Y_test = train_test_split(X_fwd, Y_fwd, test_size=0.2, random_state=42)
-
     return fwd_model, bwd_model, X_test, Y_test
 
 fwd_model, bwd_model, X_test, Y_test = train_models()
@@ -53,7 +52,7 @@ fwd_model, bwd_model, X_test, Y_test = train_models()
 # -----------------------------
 # CREATE TABS
 # -----------------------------
-tabs = st.tabs(["Forward Prediction", "Backward Prediction", "Model Performance", "Optimization"])
+tabs = st.tabs(["Forward Prediction", "Backward Prediction", "Optimization"])
 
 # -----------------------------
 # TAB 0: Forward Prediction
@@ -79,6 +78,67 @@ with tabs[0]:
         })
         st.table(computed_df)
 
+        # ----- MODEL PERFORMANCE BELOW -----
+        st.markdown("---")
+        st.subheader("📊 Forward Model Performance")
+
+        preds_test = fwd_model.predict(X_test)
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        # MSE
+        with col1:
+            st.write("**Mean Squared Error (MSE)**")
+            mse_dict = {col: mean_squared_error(Y_test[col], preds_test[:, idx])
+                        for idx, col in enumerate(Y_test.columns)}
+            mse_df = pd.DataFrame(mse_dict, index=["MSE"]).T
+            st.table(mse_df)
+
+        # ROC/EER
+        with col2:
+            st.write("**ROC Curve & EER**")
+            response_choice = st.selectbox("Select Response", ["ParticleSize", "Entrapment", "CDR"], key="roc_fwd")
+            idx = Y_test.columns.get_loc(response_choice)
+
+            y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
+            y_score = preds_test[:, idx]
+
+            fpr, tpr, thresholds = roc_curve(y_true, y_score)
+            roc_auc = auc(fpr, tpr)
+            fnr = 1 - tpr
+            eer_idx = np.nanargmin(np.abs(fpr - fnr))
+            eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
+
+            st.write(f"**{response_choice}:** AUC = {roc_auc:.2f}, EER = {eer:.2f}")
+
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+            ax.plot([0, 1], [0, 1], 'k--')
+            ax.set_xlabel("False Positive Rate")
+            ax.set_ylabel("True Positive Rate")
+            ax.set_title(f"ROC Curve ({response_choice})")
+            ax.legend()
+            st.pyplot(fig)
+
+        # Sample prediction
+        with col3:
+            st.write("**Sample Forward Prediction vs Actual**")
+            row_idx = st.number_input("Select Test Sample Row Index", min_value=0, max_value=len(X_test)-1, value=0, step=1)
+            sample_input = X_test.iloc[[row_idx]]
+            sample_actual = Y_test.iloc[[row_idx]]
+            sample_pred = fwd_model.predict(sample_input)
+
+            st.write("**Inputs**")
+            st.table(sample_input)
+            st.write("**Actual Responses**")
+            st.table(sample_actual)
+            st.write("**Predicted Responses**")
+            sample_pred_df = pd.DataFrame({
+                "Particle Size (nm)": [sample_pred[0][0]],
+                "Entrapment Efficiency (%)": [sample_pred[0][1]],
+                "CDR (%)": [sample_pred[0][2]]
+            })
+            st.table(sample_pred_df)
+
 # -----------------------------
 # TAB 1: Backward Prediction
 # -----------------------------
@@ -103,78 +163,73 @@ with tabs[1]:
         })
         st.table(computed_df)
 
+        # ----- MODEL PERFORMANCE BELOW -----
+        st.markdown("---")
+        st.subheader("📊 Backward Model Performance (Predicted vs Actual Formulation)")
+
+        X_test_bwd = Y_test  # Responses
+        Y_test_bwd = X_test  # Original inputs
+        preds_test_bwd = bwd_model.predict(X_test_bwd)
+
+        col1, col2, col3 = st.columns([1,1,2])
+
+        # MSE
+        with col1:
+            st.write("**MSE**")
+            mse_dict = {col: mean_squared_error(Y_test_bwd[col], preds_test_bwd[:, idx])
+                        for idx, col in enumerate(Y_test_bwd.columns)}
+            mse_df = pd.DataFrame(mse_dict, index=["MSE"]).T
+            st.table(mse_df)
+
+        # ROC/EER (optional)
+        with col2:
+            st.write("**ROC Curve & EER per Formulation Parameter**")
+            param_choice = st.selectbox("Select Parameter", ["GMO", "Poloxamer", "ProbeTime"], key="roc_bwd")
+            idx = Y_test_bwd.columns.get_loc(param_choice)
+            y_true = (Y_test_bwd[param_choice] > Y_test_bwd[param_choice].median()).astype(int)
+            y_score = preds_test_bwd[:, idx]
+
+            fpr, tpr, thresholds = roc_curve(y_true, y_score)
+            roc_auc = auc(fpr, tpr)
+            fnr = 1 - tpr
+            eer_idx = np.nanargmin(np.abs(fpr - fnr))
+            eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
+
+            st.write(f"**{param_choice}:** AUC = {roc_auc:.2f}, EER = {eer:.2f}")
+
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+            ax.plot([0,1],[0,1],'k--')
+            ax.set_xlabel("False Positive Rate")
+            ax.set_ylabel("True Positive Rate")
+            ax.set_title(f"ROC Curve ({param_choice})")
+            ax.legend()
+            st.pyplot(fig)
+
+        # Sample backward prediction
+        with col3:
+            st.write("**Sample Backward Prediction vs Actual**")
+            row_idx = st.number_input("Select Test Sample Row Index (Backward)", min_value=0, max_value=len(X_test_bwd)-1, value=0, step=1)
+            sample_input = X_test_bwd.iloc[[row_idx]]
+            sample_actual = Y_test_bwd.iloc[[row_idx]]
+            sample_pred = bwd_model.predict(sample_input)
+
+            st.write("**Inputs (Responses)**")
+            st.table(sample_input)
+            st.write("**Actual Formulation**")
+            st.table(sample_actual)
+            st.write("**Predicted Formulation**")
+            sample_pred_df = pd.DataFrame({
+                "GMO (%)": [sample_pred[0][0]],
+                "Poloxamer 407 (%)": [sample_pred[0][1]],
+                "Probe Time (min)": [sample_pred[0][2]]
+            })
+            st.table(sample_pred_df)
+
 # -----------------------------
-# TAB 2: Model Performance Dashboard
+# TAB 2: Optimization
 # -----------------------------
 with tabs[2]:
-    st.header("📊 Model Performance Dashboard")
-
-    preds_test = fwd_model.predict(X_test)
-
-    col1, col2, col3 = st.columns([1, 1, 2])
-
-    # ---- Column 1: MSE ----
-    with col1:
-        st.subheader("Mean Squared Error (MSE)")
-        mse_dict = {col: mean_squared_error(Y_test[col], preds_test[:, idx])
-                    for idx, col in enumerate(Y_test.columns)}
-        mse_df = pd.DataFrame(mse_dict, index=["MSE"]).T
-        st.table(mse_df)
-
-    # ---- Column 2: ROC & EER ----
-    with col2:
-        st.subheader("ROC Curve & EER")
-        response_choice = st.selectbox("Select Response for ROC/EER", ["ParticleSize", "Entrapment", "CDR"], key="roc_side")
-        idx = Y_test.columns.get_loc(response_choice)
-
-        y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
-        y_score = preds_test[:, idx]
-
-        fpr, tpr, thresholds = roc_curve(y_true, y_score)
-        roc_auc = auc(fpr, tpr)
-
-        fnr = 1 - tpr
-        eer_idx = np.nanargmin(np.abs(fpr - fnr))
-        eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
-
-        st.write(f"**{response_choice}:** AUC = {roc_auc:.2f}, EER = {eer:.2f}")
-
-        fig, ax = plt.subplots()
-        ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
-        ax.plot([0, 1], [0, 1], 'k--')
-        ax.set_xlabel("False Positive Rate")
-        ax.set_ylabel("True Positive Rate")
-        ax.set_title(f"ROC Curve ({response_choice})")
-        ax.legend()
-        st.pyplot(fig)
-
-    # ---- Column 3: Sample Forward Predictions ----
-    with col3:
-        st.subheader("Sample Predictions vs Actual")
-        # Allow user to select a row for forward prediction
-        row_idx = st.number_input("Select Test Sample Row Index", min_value=0, max_value=len(X_test)-1, value=0, step=1)
-        sample_input = X_test.iloc[[row_idx]]
-        sample_actual = Y_test.iloc[[row_idx]]
-        sample_pred = fwd_model.predict(sample_input)
-
-        st.write("**User Inputs (Formulation)**")
-        st.table(sample_input)
-
-        st.write("**Actual Responses**")
-        st.table(sample_actual)
-
-        st.write("**Predicted Responses**")
-        sample_pred_df = pd.DataFrame({
-            "Particle Size (nm)": [sample_pred[0][0]],
-            "Entrapment Efficiency (%)": [sample_pred[0][1]],
-            "CDR (%)": [sample_pred[0][2]]
-        })
-        st.table(sample_pred_df)
-
-# -----------------------------
-# TAB 3: Optimization
-# -----------------------------
-with tabs[3]:
     st.header("🎯 Optimal Formulation")
     GMO_grid = np.linspace(df.GMO.min(), df.GMO.max(), 10)
     Poloxamer_grid = np.linspace(df.Poloxamer.min(), df.Poloxamer.max(), 10)
