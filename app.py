@@ -54,9 +54,9 @@ def train_models():
 fwd_model, bwd_model, X_test, Y_test = train_models()
 
 # -----------------------------
-# TABS
+# CREATE TABS
 # -----------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
+tabs = st.tabs([
     "Forward Prediction",
     "Backward Prediction",
     "Model Performance",
@@ -64,15 +64,15 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # -----------------------------
-# TAB 1: Forward Prediction
+# TAB 0: Forward Prediction
 # -----------------------------
-with tab1:
+with tabs[0]:
     st.header("➡ Forward Prediction: Formulation → Responses")
-    gmo = st.number_input("GMO (%)", float(df.GMO.min()), float(df.GMO.max()), float(df.GMO.mean()))
-    poloxamer = st.number_input("Poloxamer 407 (%)", float(df.Poloxamer.min()), float(df.Poloxamer.max()), float(df.Poloxamer.mean()))
-    probe_time = st.number_input("Probe Time (min)", float(df.ProbeTime.min()), float(df.ProbeTime.max()), float(df.ProbeTime.mean()))
+    gmo = st.number_input("GMO (%)", float(df.GMO.min()), float(df.GMO.max()), float(df.GMO.mean()), key="fwd_gmo")
+    poloxamer = st.number_input("Poloxamer 407 (%)", float(df.Poloxamer.min()), float(df.Poloxamer.max()), float(df.Poloxamer.mean()), key="fwd_polox")
+    probe_time = st.number_input("Probe Time (min)", float(df.ProbeTime.min()), float(df.ProbeTime.max()), float(df.ProbeTime.mean()), key="fwd_probe")
 
-    if st.button("Predict Responses", key="forward"):
+    if st.button("Predict Responses", key="fwd_btn"):
         input_df = pd.DataFrame([[gmo, poloxamer, probe_time]],
                                 columns=["GMO", "Poloxamer", "ProbeTime"])
         pred = fwd_model.predict(input_df)
@@ -89,15 +89,15 @@ with tab1:
         st.table(computed_df)
 
 # -----------------------------
-# TAB 2: Backward Prediction
+# TAB 1: Backward Prediction
 # -----------------------------
-with tab2:
+with tabs[1]:
     st.header("🔄 Backward Prediction: Responses → Formulation")
-    particle_size = st.number_input("Particle Size (nm)", float(df.ParticleSize.min()), float(df.ParticleSize.max()), float(df.ParticleSize.mean()))
-    entrapment = st.number_input("Entrapment Efficiency (%)", float(df.Entrapment.min()), float(df.Entrapment.max()), float(df.Entrapment.mean()))
-    cdr = st.number_input("CDR (%)", float(df.CDR.min()), float(df.CDR.max()), float(df.CDR.mean()))
+    particle_size = st.number_input("Particle Size (nm)", float(df.ParticleSize.min()), float(df.ParticleSize.max()), float(df.ParticleSize.mean()), key="bwd_ps")
+    entrapment = st.number_input("Entrapment Efficiency (%)", float(df.Entrapment.min()), float(df.Entrapment.max()), float(df.Entrapment.mean()), key="bwd_ent")
+    cdr = st.number_input("CDR (%)", float(df.CDR.min()), float(df.CDR.max()), float(df.CDR.mean()), key="bwd_cdr")
 
-    if st.button("Predict Formulation", key="backward"):
+    if st.button("Predict Formulation", key="bwd_btn"):
         input_df = pd.DataFrame([[particle_size, entrapment, cdr]],
                                 columns=["ParticleSize", "Entrapment", "CDR"])
         pred = bwd_model.predict(input_df)
@@ -114,9 +114,9 @@ with tab2:
         st.table(computed_df)
 
 # -----------------------------
-# TAB 3: Model Performance
+# TAB 2: Model Performance
 # -----------------------------
-with tab3:
+with tabs[2]:
     st.header("📈 Model Performance")
     preds_test = fwd_model.predict(X_test)
 
@@ -126,7 +126,7 @@ with tab3:
         st.write(f"{col_name}: {mse:.2f}")
 
     st.subheader("ROC Curve & Equal Error Rate (EER)")
-    response_choice = st.selectbox("Select Response for ROC/EER", ["ParticleSize", "Entrapment", "CDR"], key="roc_tab3")
+    response_choice = st.selectbox("Select Response for ROC/EER", ["ParticleSize", "Entrapment", "CDR"], key="roc_tab")
     idx = Y_test.columns.get_loc(response_choice)
 
     y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
@@ -151,9 +151,9 @@ with tab3:
     st.pyplot(fig_roc)
 
 # -----------------------------
-# TAB 4: Optimization
+# TAB 3: Optimization
 # -----------------------------
-with tab4:
+with tabs[3]:
     st.header("🎯 Optimal Formulation")
     GMO_grid = np.linspace(df.GMO.min(), df.GMO.max(), 10)
     Poloxamer_grid = np.linspace(df.Poloxamer.min(), df.Poloxamer.max(), 10)
@@ -169,7 +169,7 @@ with tab4:
 
     best = candidates.loc[candidates.Score.idxmax()]
     st.success("Optimal Formulation Found")
-    st.write(best)
+    st.table(best)
 
 # -----------------------------
 # FOOTER
