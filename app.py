@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, roc_curve, auc
 # -----------------------------
 st.set_page_config(page_title="DOE Full ML Dashboard", layout="wide")
 st.title("🔬 DOE + ML Full Dashboard")
-st.write("Forward/Backward Prediction, Model Performance, and Optimal Formulation")
+st.write("Forward/Backward Prediction, Model Performance (MSE & EER), and Optimal Formulation")
 
 # -----------------------------
 # LOAD DATA
@@ -21,10 +21,7 @@ st.write("Forward/Backward Prediction, Model Performance, and Optimal Formulatio
 @st.cache_data
 def load_data():
     df = pd.read_excel("doe.xlsx")
-    df.columns = [
-        "GMO", "Poloxamer", "ProbeTime",
-        "ParticleSize", "Entrapment", "CDR"
-    ]
+    df.columns = ["GMO", "Poloxamer", "ProbeTime", "ParticleSize", "Entrapment", "CDR"]
     return df
 
 df = load_data()
@@ -46,7 +43,7 @@ def train_models():
     bwd_model = MultiOutputRegressor(RandomForestRegressor(n_estimators=200, random_state=42))
     bwd_model.fit(X_bwd, Y_bwd)
 
-    # Train/test split for performance evaluation
+    # Train/test split for performance evaluation (forward model)
     X_train, X_test, Y_train, Y_test = train_test_split(X_fwd, Y_fwd, test_size=0.2, random_state=42)
 
     return fwd_model, bwd_model, X_test, Y_test
@@ -56,12 +53,7 @@ fwd_model, bwd_model, X_test, Y_test = train_models()
 # -----------------------------
 # CREATE TABS
 # -----------------------------
-tabs = st.tabs([
-    "Forward Prediction",
-    "Backward Prediction",
-    "Model Performance",
-    "Optimization"
-])
+tabs = st.tabs(["Forward Prediction", "Backward Prediction", "Model Performance", "Optimization"])
 
 # -----------------------------
 # TAB 0: Forward Prediction
@@ -73,8 +65,7 @@ with tabs[0]:
     probe_time = st.number_input("Probe Time (min)", float(df.ProbeTime.min()), float(df.ProbeTime.max()), float(df.ProbeTime.mean()), key="fwd_probe")
 
     if st.button("Predict Responses", key="fwd_btn"):
-        input_df = pd.DataFrame([[gmo, poloxamer, probe_time]],
-                                columns=["GMO", "Poloxamer", "ProbeTime"])
+        input_df = pd.DataFrame([[gmo, poloxamer, probe_time]], columns=["GMO", "Poloxamer", "ProbeTime"])
         pred = fwd_model.predict(input_df)
 
         st.write("**User Inputs (Formulation)**")
@@ -98,8 +89,7 @@ with tabs[1]:
     cdr = st.number_input("CDR (%)", float(df.CDR.min()), float(df.CDR.max()), float(df.CDR.mean()), key="bwd_cdr")
 
     if st.button("Predict Formulation", key="bwd_btn"):
-        input_df = pd.DataFrame([[particle_size, entrapment, cdr]],
-                                columns=["ParticleSize", "Entrapment", "CDR"])
+        input_df = pd.DataFrame([[particle_size, entrapment, cdr]], columns=["ParticleSize", "Entrapment", "CDR"])
         pred = bwd_model.predict(input_df)
 
         st.write("**User Inputs (Target Responses)**")
@@ -114,41 +104,57 @@ with tabs[1]:
         st.table(computed_df)
 
 # -----------------------------
-# TAB 2: Model Performance
+# TAB 2: Model Performance (Side-by-Side)
 # -----------------------------
 with tabs[2]:
-    st.header("📈 Model Performance")
+    st.header("📈 Model Performance Dashboard")
+
     preds_test = fwd_model.predict(X_test)
 
-    st.subheader("Mean Squared Error (MSE)")
-    for idx, col_name in enumerate(Y_test.columns):
-        mse = mean_squared_error(Y_test[col_name], preds_test[:, idx])
-        st.write(f"{col_name}: {mse:.2f}")
+    col1, col2, col3 = st.columns([1, 1, 2])
 
-    st.subheader("ROC Curve & Equal Error Rate (EER)")
-    response_choice = st.selectbox("Select Response for ROC/EER", ["ParticleSize", "Entrapment", "CDR"], key="roc_tab")
-    idx = Y_test.columns.get_loc(response_choice)
+    # ---- Column 1: MSE ----
+    with col1:
+        st.subheader("Mean Squared Error (MSE)")
+        mse_dict = {col: mean_squared_error(Y_test[col], preds_test[:, idx])
+                    for idx, col in enumerate(Y_test.columns)}
+        mse_df = pd.DataFrame(mse_dict, index=["MSE"]).T
+        st.table(mse_df)
 
-    y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
-    y_score = preds_test[:, idx]
+    # ---- Column 2: ROC & EER ----
+    with col2:
+        st.subheader("ROC Curve & EER")
+        response_choice = st.selectbox("Select Response", ["ParticleSize", "Entrapment", "CDR"], key="roc_side")
+        idx = Y_test.columns.get_loc(response_choice)
 
-    fpr, tpr, thresholds = roc_curve(y_true, y_score)
-    roc_auc = auc(fpr, tpr)
+        y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
+        y_score = preds_test[:, idx]
 
-    fnr = 1 - tpr
-    eer_idx = np.nanargmin(np.abs(fpr - fnr))
-    eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
+        fpr, tpr, thresholds = roc_curve(y_true, y_score)
+        roc_auc = auc(fpr, tpr)
 
-    st.write(f"**{response_choice}:** ROC AUC = {roc_auc:.2f}, EER = {eer:.2f}")
+        fnr = 1 - tpr
+        eer_idx = np.nanargmin(np.abs(fpr - fnr))
+        eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
 
-    fig_roc, ax_roc = plt.subplots()
-    ax_roc.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
-    ax_roc.plot([0, 1], [0, 1], 'k--')
-    ax_roc.set_xlabel("False Positive Rate")
-    ax_roc.set_ylabel("True Positive Rate")
-    ax_roc.set_title(f"ROC Curve ({response_choice})")
-    ax_roc.legend()
-    st.pyplot(fig_roc)
+        st.write(f"**{response_choice}:** AUC = {roc_auc:.2f}, EER = {eer:.2f}")
+
+        fig, ax = plt.subplots()
+        ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+        ax.plot([0, 1], [0, 1], 'k--')
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.set_title(f"ROC Curve ({response_choice})")
+        ax.legend()
+        st.pyplot(fig)
+
+    # ---- Column 3: Sample Predictions ----
+    with col3:
+        st.subheader("Sample Predictions vs Actual")
+        sample_df = X_test.copy()
+        sample_df[["ParticleSize_Actual", "Entrapment_Actual", "CDR_Actual"]] = Y_test
+        sample_df[["ParticleSize_Pred", "Entrapment_Pred", "CDR_Pred"]] = preds_test
+        st.dataframe(sample_df.head(10))
 
 # -----------------------------
 # TAB 3: Optimization
