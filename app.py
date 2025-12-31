@@ -91,6 +91,17 @@ def compute_confusion(y_true_cont, y_pred_cont):
     y_pred = (y_pred_cont >= thr).astype(int)
     return confusion_matrix(y_true, y_pred)
 
+def get_cm_labels(name):
+    labels = {
+        "ParticleSize": ["Small Size", "Large Size"],
+        "Entrapment": ["Low EE", "High EE"],
+        "CDR": ["Slow Release", "Fast Release"],
+        "GMO": ["Low GMO", "High GMO"],
+        "Poloxamer": ["Low Poloxamer", "High Poloxamer"],
+        "ProbeTime": ["Short Time", "Long Time"]
+    }
+    return labels.get(name, ["Low", "High"])
+
 # -------------------------------------------------
 # TABS
 # -------------------------------------------------
@@ -121,16 +132,14 @@ with tab1:
     st.dataframe(user_X, use_container_width=True)
 
     st.write("### Computed Outputs")
-    out_df = pd.DataFrame(pred_Y, columns=Y.columns)
-    st.dataframe(out_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(pred_Y, columns=Y.columns), use_container_width=True)
 
     # ---------- MODEL PERFORMANCE ----------
     st.markdown("---")
     st.subheader("📊 Model Performance")
 
     preds_test = fwd_model.predict(X_test)
-
-    mp1, mp2 = st.columns([1, 1])
+    mp1, mp2 = st.columns(2)
 
     with mp1:
         rows = []
@@ -145,23 +154,24 @@ with tab1:
         )
 
     with mp2:
-        resp = st.selectbox("Select Output", Y.columns, key="fwd_roc")
+        resp = st.selectbox("Select Output", Y.columns, key="fwd_eval")
         idx = Y.columns.get_loc(resp)
 
         fpr, tpr, eer, eer_idx, roc_auc = compute_eer(Y_test[resp], preds_test[:, idx])
 
         fig, ax = plt.subplots()
-        ax.plot(fpr, tpr, label=f"AUC={roc_auc:.2f}")
-        ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label=f"EER={eer:.2f}")
+        ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+        ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label=f"EER = {eer:.2f}")
         ax.plot([0, 1], [0, 1], "k--")
         ax.legend()
-        ax.set_xlabel("FPR")
-        ax.set_ylabel("TPR")
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
         st.pyplot(fig)
 
         cm = compute_confusion(Y_test[resp], preds_test[:, idx])
+        labels = get_cm_labels(resp)
         fig, ax = plt.subplots()
-        ConfusionMatrixDisplay(cm, display_labels=["Low", "High"]).plot(ax=ax, cmap="Blues")
+        ConfusionMatrixDisplay(cm, display_labels=labels).plot(ax=ax, cmap="Blues", values_format="d")
         st.pyplot(fig)
 
 # =================================================
@@ -192,8 +202,7 @@ with tab2:
     st.subheader("📊 Model Performance")
 
     preds_test = bwd_model.predict(Y_test)
-
-    mp1, mp2 = st.columns([1, 1])
+    mp1, mp2 = st.columns(2)
 
     with mp1:
         rows = []
@@ -208,21 +217,22 @@ with tab2:
         )
 
     with mp2:
-        param = st.selectbox("Select Parameter", X.columns, key="bwd_roc")
+        param = st.selectbox("Select Parameter", X.columns, key="bwd_eval")
         idx = X.columns.get_loc(param)
 
         fpr, tpr, eer, eer_idx, roc_auc = compute_eer(X_test[param], preds_test[:, idx])
 
         fig, ax = plt.subplots()
-        ax.plot(fpr, tpr, label=f"AUC={roc_auc:.2f}")
-        ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label=f"EER={eer:.2f}")
+        ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+        ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label=f"EER = {eer:.2f}")
         ax.plot([0, 1], [0, 1], "k--")
         ax.legend()
         st.pyplot(fig)
 
         cm = compute_confusion(X_test[param], preds_test[:, idx])
+        labels = get_cm_labels(param)
         fig, ax = plt.subplots()
-        ConfusionMatrixDisplay(cm, display_labels=["Low", "High"]).plot(ax=ax, cmap="Blues")
+        ConfusionMatrixDisplay(cm, display_labels=labels).plot(ax=ax, cmap="Blues", values_format="d")
         st.pyplot(fig)
 
 # =================================================
