@@ -104,10 +104,10 @@ with tabs[1]:
         st.table(computed_df)
 
 # -----------------------------
-# TAB 2: Model Performance (Side-by-Side)
+# TAB 2: Model Performance Dashboard
 # -----------------------------
 with tabs[2]:
-    st.header("📈 Model Performance Dashboard")
+    st.header("📊 Model Performance Dashboard")
 
     preds_test = fwd_model.predict(X_test)
 
@@ -124,7 +124,7 @@ with tabs[2]:
     # ---- Column 2: ROC & EER ----
     with col2:
         st.subheader("ROC Curve & EER")
-        response_choice = st.selectbox("Select Response", ["ParticleSize", "Entrapment", "CDR"], key="roc_side")
+        response_choice = st.selectbox("Select Response for ROC/EER", ["ParticleSize", "Entrapment", "CDR"], key="roc_side")
         idx = Y_test.columns.get_loc(response_choice)
 
         y_true = (Y_test[response_choice] > Y_test[response_choice].median()).astype(int)
@@ -148,13 +148,28 @@ with tabs[2]:
         ax.legend()
         st.pyplot(fig)
 
-    # ---- Column 3: Sample Predictions ----
+    # ---- Column 3: Sample Forward Predictions ----
     with col3:
         st.subheader("Sample Predictions vs Actual")
-        sample_df = X_test.copy()
-        sample_df[["ParticleSize_Actual", "Entrapment_Actual", "CDR_Actual"]] = Y_test
-        sample_df[["ParticleSize_Pred", "Entrapment_Pred", "CDR_Pred"]] = preds_test
-        st.dataframe(sample_df.head(10))
+        # Allow user to select a row for forward prediction
+        row_idx = st.number_input("Select Test Sample Row Index", min_value=0, max_value=len(X_test)-1, value=0, step=1)
+        sample_input = X_test.iloc[[row_idx]]
+        sample_actual = Y_test.iloc[[row_idx]]
+        sample_pred = fwd_model.predict(sample_input)
+
+        st.write("**User Inputs (Formulation)**")
+        st.table(sample_input)
+
+        st.write("**Actual Responses**")
+        st.table(sample_actual)
+
+        st.write("**Predicted Responses**")
+        sample_pred_df = pd.DataFrame({
+            "Particle Size (nm)": [sample_pred[0][0]],
+            "Entrapment Efficiency (%)": [sample_pred[0][1]],
+            "CDR (%)": [sample_pred[0][2]]
+        })
+        st.table(sample_pred_df)
 
 # -----------------------------
 # TAB 3: Optimization
