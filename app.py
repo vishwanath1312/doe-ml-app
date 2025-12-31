@@ -56,23 +56,33 @@ st.header("📊 Results Dashboard: Prediction, Model Performance & Optimization"
 col1, col2, col3 = st.columns(3)
 
 # -----------------------------
-# COLUMN 1: Prediction
+# COLUMN 1: Prediction & Computed Outputs
 # -----------------------------
 with col1:
-    st.subheader("🧪 Prediction")
+    st.subheader("🧪 Prediction Inputs")
     gmo = st.number_input("GMO (%)", float(X.GMO.min()), float(X.GMO.max()), float(X.GMO.mean()))
     poloxamer = st.number_input("Poloxamer 407 (%)", float(X.Poloxamer.min()), float(X.Poloxamer.max()), float(X.Poloxamer.mean()))
     probe_time = st.number_input("Probe Time (min)", float(X.ProbeTime.min()), float(X.ProbeTime.max()), float(X.ProbeTime.mean()))
 
     if st.button("🔍 Predict & Evaluate"):
+        # Create input DataFrame
         user_input = pd.DataFrame([[gmo, poloxamer, probe_time]],
                                   columns=["GMO", "Poloxamer", "ProbeTime"])
+        # Predict outputs
         pred = model.predict(user_input)
 
         st.success("Prediction Successful")
-        st.metric("Particle Size (nm)", f"{pred[0][0]:.2f}")
-        st.metric("Entrapment Efficiency (%)", f"{pred[0][1]:.2f}")
-        st.metric("CDR (%)", f"{pred[0][2]:.2f}")
+
+        # Show computed results in table
+        computed_df = pd.DataFrame({
+            "GMO (%)": [gmo],
+            "Poloxamer 407 (%)": [poloxamer],
+            "Probe Time (min)": [probe_time],
+            "Particle Size (nm)": [pred[0][0]],
+            "Entrapment Efficiency (%)": [pred[0][1]],
+            "CDR (%)": [pred[0][2]]
+        })
+        st.table(computed_df)
 
         # -----------------------------
         # COLUMN 2: Model Performance (MSE + ROC/EER)
@@ -120,7 +130,7 @@ with col1:
         # COLUMN 3: Optimization
         # -----------------------------
         with col3:
-            st.subheader("🎯 Optimization")
+            st.subheader("🎯 Optimal Formulation")
             GMO_grid = np.linspace(X.GMO.min(), X.GMO.max(), 10)
             Poloxamer_grid = np.linspace(X.Poloxamer.min(), X.Poloxamer.max(), 10)
             ProbeTime_grid = np.linspace(X.ProbeTime.min(), X.ProbeTime.max(), 10)
