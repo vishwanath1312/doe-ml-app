@@ -8,15 +8,20 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, roc_curve, auc
 
-# -----------------------------
-# PAGE SETUP
-# -----------------------------
-st.set_page_config(page_title="DOE ML Dashboard", layout="wide")
-st.title("🔬 DOE + ML Based Formulation Dashboard")
+# =====================================================
+# PAGE CONFIG
+# =====================================================
+st.set_page_config(
+    page_title="DOE + ML Formulation Dashboard",
+    layout="wide"
+)
 
-# -----------------------------
+st.title("🔬 DOE + Machine Learning Formulation Dashboard")
+st.caption("Forward & Backward Prediction with MSE, ROC and EER Evaluation")
+
+# =====================================================
 # LOAD DATA
-# -----------------------------
+# =====================================================
 @st.cache_data
 def load_data():
     df = pd.read_excel("doe.xlsx")
@@ -28,68 +33,70 @@ def load_data():
 
 df = load_data()
 
-X = df[["GMO", "Poloxamer", "ProbeTime"]]
-Y = df[["ParticleSize", "Entrapment", "CDR"]]
+# =====================================================
+# SPLIT DATA
+# =====================================================
+X_fwd = df[["GMO", "Poloxamer", "ProbeTime"]]
+Y_fwd = df[["ParticleSize", "Entrapment", "CDR"]]
 
-# -----------------------------
-# TRAIN MODEL
-# -----------------------------
-@st.cache_resource
-def train_model():
-    X_train, X_test, Y_train, Y_test = train_test_split(
-        X, Y, test_size=0.2, random_state=42
-    )
-
-    model = MultiOutputRegressor(
-        RandomForestRegressor(n_estimators=300, random_state=42)
-    )
-    model.fit(X_train, Y_train)
-
-    return model, X_test, Y_test
-
-model, X_test, Y_test = train_model()
-
-# -----------------------------
-# TABS
-# -----------------------------
-tabs = st.tabs(["Forward Prediction: Formulation", "Optimization"])
+X_bwd = Y_fwd
+Y_bwd = X_fwd
 
 # =====================================================
-# TAB 1: FORWARD PREDICTION + MODEL PERFORMANCE BELOW
+# TRAIN MODELS
+# =====================================================
+@st.cache_resource
+def train_models():
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X_fwd, Y_fwd, test_size=0.2, random_state=42
+    )
+
+    fwd_model = MultiOutputRegressor(
+        RandomForestRegressor(n_estimators=300, random_state=42)
+    )
+    fwd_model.fit(X_train, Y_train)
+
+    bwd_model = MultiOutputRegressor(
+        RandomForestRegressor(n_estimators=300, random_state=42)
+    )
+    bwd_model.fit(X_bwd, Y_bwd)
+
+    return fwd_model, bwd_model, X_test, Y_test
+
+fwd_model, bwd_model, X_test, Y_test = train_models()
+
+# =====================================================
+# TABS
+# =====================================================
+tabs = st.tabs([
+    "➡ Forward Prediction (Formulation → Responses)",
+    "🔄 Backward Prediction (Responses → Formulation)"
+])
+
+# =====================================================
+# TAB 1: FORWARD PREDICTION
 # =====================================================
 with tabs[0]:
 
-    st.header("➡ Forward Prediction: Formulation → Responses")
+    st.header("➡ Forward Prediction")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    with col1:
-        gmo = st.number_input(
-            "GMO (%)",
-            float(X.GMO.min()), float(X.GMO.max()), float(X.GMO.mean())
-        )
-    with col2:
-        poloxamer = st.number_input(
-            "Poloxamer 407 (%)",
-            float(X.Poloxamer.min()), float(X.Poloxamer.max()), float(X.Poloxamer.mean())
-        )
-    with col3:
-        probe_time = st.number_input(
-            "Probe Time (min)",
-            float(X.ProbeTime.min()), float(X.ProbeTime.max()), float(X.ProbeTime.mean())
-        )
+    with c1:
+        gmo = st.number_input("GMO (%)", float(df.GMO.min()), float(df.GMO.max()), float(df.GMO.mean()))
+    with c2:
+        poloxamer = st.number_input("Poloxamer 407 (%)", float(df.Poloxamer.min()), float(df.Poloxamer.max()), float(df.Poloxamer.mean()))
+    with c3:
+        probe = st.number_input("Probe Time (min)", float(df.ProbeTime.min()), float(df.ProbeTime.max()), float(df.ProbeTime.mean()))
 
     if st.button("🔍 Predict Responses"):
 
-        user_df = pd.DataFrame(
-            [[gmo, poloxamer, probe_time]],
-            columns=["GMO", "Poloxamer", "ProbeTime"]
-        )
-
-        preds = model.predict(user_df)
+        user_input = pd.DataFrame([[gmo, poloxamer, probe]],
+                                  columns=["GMO", "Poloxamer", "ProbeTime"])
+        preds = fwd_model.predict(user_input)
 
         st.subheader("📥 User Inputs")
-        st.table(user_df)
+        st.table(user_input)
 
         st.subheader("📤 Computed Outputs")
         output_df = pd.DataFrame({
@@ -99,49 +106,42 @@ with tabs[0]:
         })
         st.table(output_df)
 
-        # =============================================
-        # MODEL PERFORMANCE (BELOW FORWARD PREDICTION)
-        # =============================================
+        # ================= MODEL PERFORMANCE =================
         st.markdown("---")
-        st.subheader("📊 Model Performance (Forward Model)")
+        st.subheader("📊 Forward Model Performance")
 
-        preds_test = model.predict(X_test)
+        preds_test = fwd_model.predict(X_test)
 
-        mp_col1, mp_col2 = st.columns([1, 2])
+        mp1, mp2 = st.columns([1, 2])
 
-        # -------- MSE --------
-        with mp_col1:
+        # ----- MSE -----
+        with mp1:
             st.write("### Mean Squared Error (MSE)")
-
             mse_vals = {
-                col: mean_squared_error(Y_test[col], preds_test[:, idx])
-                for idx, col in enumerate(Y_test.columns)
+                col: mean_squared_error(Y_test[col], preds_test[:, i])
+                for i, col in enumerate(Y_test.columns)
             }
+            st.table(pd.DataFrame(mse_vals, index=["MSE"]).T)
 
-            mse_df = pd.DataFrame(mse_vals, index=["MSE"]).T
-            st.table(mse_df)
-
-        # -------- ROC + EER --------
-        with mp_col2:
-            st.write("### ROC Curve & Equal Error Rate (EER)")
+        # ----- ROC & EER -----
+        with mp2:
+            st.write("### ROC Curve & EER")
 
             response = st.selectbox(
-                "Select Response Variable",
-                ["ParticleSize", "Entrapment", "CDR"]
+                "Select Output Variable",
+                ["ParticleSize", "Entrapment", "CDR"],
+                key="fwd_roc"
             )
 
             idx = Y_test.columns.get_loc(response)
-
-            # Robust binary conversion
             y_true = (Y_test[response] >= Y_test[response].median()).astype(int)
             y_score = preds_test[:, idx]
 
-            fpr, tpr, thresholds = roc_curve(y_true, y_score)
+            fpr, tpr, _ = roc_curve(y_true, y_score)
             roc_auc = auc(fpr, tpr)
-
             fnr = 1 - tpr
-            eer_index = np.argmin(np.abs(fpr - fnr))
-            eer = (fpr[eer_index] + fnr[eer_index]) / 2
+            eer_idx = np.argmin(np.abs(fpr - fnr))
+            eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
 
             st.write(f"**AUC:** {roc_auc:.3f}")
             st.write(f"**EER:** {eer:.3f}")
@@ -149,7 +149,7 @@ with tabs[0]:
             fig, ax = plt.subplots()
             ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
             ax.plot([0, 1], [0, 1], "k--")
-            ax.scatter(fpr[eer_index], tpr[eer_index], color="red", label="EER Point")
+            ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label="EER")
             ax.set_xlabel("False Positive Rate")
             ax.set_ylabel("True Positive Rate")
             ax.set_title(f"ROC Curve ({response})")
@@ -157,33 +157,90 @@ with tabs[0]:
             st.pyplot(fig)
 
 # =====================================================
-# TAB 2: OPTIMIZATION
+# TAB 2: BACKWARD PREDICTION
 # =====================================================
 with tabs[1]:
-    st.header("🎯 Optimal Formulation")
 
-    GMO = np.linspace(X.GMO.min(), X.GMO.max(), 10)
-    Poloxamer = np.linspace(X.Poloxamer.min(), X.Poloxamer.max(), 10)
-    ProbeTime = np.linspace(X.ProbeTime.min(), X.ProbeTime.max(), 10)
+    st.header("🔄 Backward Prediction")
 
-    grid = pd.DataFrame(
-        [[g, p, t] for g in GMO for p in Poloxamer for t in ProbeTime],
-        columns=["GMO", "Poloxamer", "ProbeTime"]
-    )
+    c1, c2, c3 = st.columns(3)
 
-    preds = model.predict(grid)
+    with c1:
+        ps = st.number_input("Particle Size (nm)", float(df.ParticleSize.min()), float(df.ParticleSize.max()), float(df.ParticleSize.mean()))
+    with c2:
+        ent = st.number_input("Entrapment Efficiency (%)", float(df.Entrapment.min()), float(df.Entrapment.max()), float(df.Entrapment.mean()))
+    with c3:
+        cdr = st.number_input("CDR (%)", float(df.CDR.min()), float(df.CDR.max()), float(df.CDR.mean()))
 
-    grid["ParticleSize"] = preds[:, 0]
-    grid["Entrapment"] = preds[:, 1]
-    grid["CDR"] = preds[:, 2]
+    if st.button("🔄 Predict Formulation"):
 
-    grid["Score"] = (
-        -grid["ParticleSize"] +
-        grid["Entrapment"] +
-        grid["CDR"]
-    )
+        user_input = pd.DataFrame([[ps, ent, cdr]],
+                                  columns=["ParticleSize", "Entrapment", "CDR"])
+        preds = bwd_model.predict(user_input)
 
-    best = grid.loc[grid.Score.idxmax()]
+        st.subheader("📥 User Inputs")
+        st.table(user_input)
 
-    st.success("Optimal Formulation Found")
-    st.table(best)
+        st.subheader("📤 Computed Formulation")
+        output_df = pd.DataFrame({
+            "GMO (%)": [preds[0][0]],
+            "Poloxamer 407 (%)": [preds[0][1]],
+            "Probe Time (min)": [preds[0][2]]
+        })
+        st.table(output_df)
+
+        # ================= MODEL PERFORMANCE =================
+        st.markdown("---")
+        st.subheader("📊 Backward Model Performance")
+
+        preds_test = bwd_model.predict(Y_test)
+
+        mp1, mp2 = st.columns([1, 2])
+
+        # ----- MSE -----
+        with mp1:
+            st.write("### Mean Squared Error (MSE)")
+            mse_vals = {
+                col: mean_squared_error(X_test[col], preds_test[:, i])
+                for i, col in enumerate(X_test.columns)
+            }
+            st.table(pd.DataFrame(mse_vals, index=["MSE"]).T)
+
+        # ----- ROC & EER -----
+        with mp2:
+            st.write("### ROC Curve & EER")
+
+            param = st.selectbox(
+                "Select Formulation Parameter",
+                ["GMO", "Poloxamer", "ProbeTime"],
+                key="bwd_roc"
+            )
+
+            idx = X_test.columns.get_loc(param)
+            y_true = (X_test[param] >= X_test[param].median()).astype(int)
+            y_score = preds_test[:, idx]
+
+            fpr, tpr, _ = roc_curve(y_true, y_score)
+            roc_auc = auc(fpr, tpr)
+            fnr = 1 - tpr
+            eer_idx = np.argmin(np.abs(fpr - fnr))
+            eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
+
+            st.write(f"**AUC:** {roc_auc:.3f}")
+            st.write(f"**EER:** {eer:.3f}")
+
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+            ax.plot([0, 1], [0, 1], "k--")
+            ax.scatter(fpr[eer_idx], tpr[eer_idx], color="red", label="EER")
+            ax.set_xlabel("False Positive Rate")
+            ax.set_ylabel("True Positive Rate")
+            ax.set_title(f"ROC Curve ({param})")
+            ax.legend()
+            st.pyplot(fig)
+
+# =====================================================
+# FOOTER
+# =====================================================
+st.markdown("---")
+st.caption("DOE + ML Dashboard | Forward & Backward Prediction with Robust Model Evaluation")
