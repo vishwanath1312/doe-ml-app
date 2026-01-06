@@ -31,7 +31,7 @@ st.title("🧪 DOE–ML Formulation Intelligence Dashboard")
 @st.cache_data
 def load_data():
     # Replace with your actual dataset
-    return pd.read_csv("formulation_data.csv")
+    return pd.read_csv("doe.xlsx")
 
 df = load_data()
 
