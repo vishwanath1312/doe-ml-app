@@ -1,12 +1,10 @@
-streamlit==1.31.1
+streamlit
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+scipy
 
-pandas==2.1.4
-numpy==1.26.4
-
-matplotlib==3.8.2
-plotly==5.18.0
-
-scikit-learn==1.3.2
-openpyxl==3.1.2
 
 
