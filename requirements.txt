@@ -1,9 +1,10 @@
 streamlit
-pandas
 numpy
+pandas
 scikit-learn
 matplotlib
-seaborn
-scipy
+plotly
+scikit-optimize
+shap
 openpyxl
 
